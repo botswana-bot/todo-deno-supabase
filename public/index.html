@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="fr" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Todo — multi-appareils</title>
+
+    <!-- Tailwind via CDN (simple & OK for small app) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            boxShadow: { soft: '0 10px 25px rgba(0,0,0,.10)' }
+          }
+        }
+      }
+    </script>
+
+    <script>
+      // Early theme init
+      (function () {
+        const saved = localStorage.getItem('theme')
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        const dark = saved ? saved === 'dark' : prefersDark
+        document.documentElement.classList.toggle('dark', dark)
+      })()
+    </script>
+  </head>
+
+  <body class="h-full bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+    <div class="min-h-full">
+      <header class="sticky top-0 z-10 border-b border-zinc-200/70 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
+        <div class="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+          <div>
+            <div class="text-sm text-zinc-500 dark:text-zinc-400">Todo</div>
+            <div class="text-lg font-semibold">Multi‑appareils (Supabase)</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btn-theme" class="rounded-lg border border-zinc-200 px-3 py-2 text-sm shadow-sm hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900">
+              Thème
+            </button>
+            <button id="btn-logout" class="hidden rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white shadow-soft hover:bg-black dark:bg-white dark:text-black dark:hover:bg-zinc-200">
+              Déconnexion
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main class="mx-auto max-w-4xl px-4 py-8">
+        <div id="banner" class="mb-6 hidden rounded-xl border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900"></div>
+
+        <!-- Auth card -->
+        <section id="auth" class="hidden">
+          <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
+            <h2 class="text-lg font-semibold">Connexion</h2>
+            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Connecte-toi pour retrouver tes tâches sur tous tes appareils.
+            </p>
+
+            <form id="auth-form" class="mt-6 grid gap-3">
+              <label class="grid gap-1">
+                <span class="text-sm">Email</span>
+                <input id="email" type="email" required class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none ring-0 focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-zinc-600" />
+              </label>
+
+              <label class="grid gap-1">
+                <span class="text-sm">Mot de passe</span>
+                <input id="password" type="password" required minlength="6" class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none ring-0 focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-zinc-600" />
+              </label>
+
+              <div class="mt-2 flex flex-wrap gap-2">
+                <button id="btn-login" type="submit" class="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-black dark:bg-white dark:text-black dark:hover:bg-zinc-200">
+                  Se connecter
+                </button>
+                <button id="btn-signup" type="button" class="rounded-lg border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-950">
+                  Créer un compte
+                </button>
+              </div>
+
+              <p class="text-xs text-zinc-500 dark:text-zinc-400">
+                Le compte est géré par Supabase (email + mot de passe).
+              </p>
+            </form>
+          </div>
+        </section>
+
+        <!-- App card -->
+        <section id="app" class="hidden">
+          <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 class="text-lg font-semibold">Mes tâches</h2>
+                <p id="whoami" class="mt-1 text-sm text-zinc-500 dark:text-zinc-400"></p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="btn-refresh" class="rounded-lg border border-zinc-200 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-950">Rafraîchir</button>
+              </div>
+            </div>
+
+            <form id="todo-form" class="mt-6 flex gap-2">
+              <input id="todo-text" placeholder="Ajouter une tâche…" class="flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-zinc-600" />
+              <button class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">Ajouter</button>
+            </form>
+
+            <div class="mt-6">
+              <div class="mb-2 flex items-center justify-between">
+                <div class="text-sm text-zinc-500 dark:text-zinc-400" id="stats"></div>
+                <button id="btn-clear-done" class="text-sm text-zinc-500 underline hover:text-zinc-900 dark:hover:text-white">Supprimer terminées</button>
+              </div>
+
+              <ul id="todo-list" class="grid gap-2"></ul>
+
+              <template id="todo-item">
+                <li class="group flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950">
+                  <label class="flex flex-1 items-center gap-3">
+                    <input class="todo-toggle h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-600 dark:border-zinc-700" type="checkbox" />
+                    <span class="todo-text text-sm"></span>
+                  </label>
+                  <button class="todo-del rounded-lg px-3 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white">
+                    Supprimer
+                  </button>
+                </li>
+              </template>
+            </div>
+          </div>
+
+          <p class="mt-6 text-xs text-zinc-500 dark:text-zinc-400">
+            Astuce: pour la sécurité, on utilise une table Postgres avec RLS (chaque user ne voit que ses lignes).
+          </p>
+        </section>
+
+        <section class="mt-10 text-xs text-zinc-500 dark:text-zinc-400">
+          <p>
+            Déploiement: Deno Deploy. Stockage + login: Supabase.
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
