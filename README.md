@@ -4,12 +4,13 @@ Todo app simple et un peu jolie (Tailwind) avec login + DB.
 
 - Hébergement: **Deno Deploy**
 - Login + DB: **Supabase Auth + Postgres**
-- Sécurité: **RLS** (chaque user ne voit que ses tâches)
+- Sécurité: **RLS**
+- Mode: **partagé** (tous les utilisateurs connectés voient toutes les tâches)
 
-## 1) Créer Supabase
+## 1) Créer / reconstruire Supabase
 
 1. Crée un projet sur https://supabase.com
-2. Va dans **SQL Editor** et exécute `sql/001_todos.sql`
+2. Va dans **SQL Editor** et exécute `sql/000_rebuild.sql` (recrée le schéma)
 3. Va dans **Project Settings > API** et récupère:
    - `Project URL` → `SUPABASE_URL`
    - `anon public` key → `SUPABASE_ANON_KEY`
