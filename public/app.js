@@ -31,12 +31,48 @@ const ui = {
   list: $("todo-list"),
   empty: $("empty"),
   tpl: $("todo-item"),
+
+  toast: $("toast"),
+  toastInner: $("toast-inner"),
+  toastTitle: $("toast-title"),
+  toastMsg: $("toast-msg"),
+  toastClose: $("toast-close"),
 };
+
+let presenceChannel = null;
+let lastPresenceSet = new Set();
 
 let state = {
   lists: [],
   selectedListId: null,
 };
+
+function showToast(title, msg, kind = "info", timeoutMs = 4500) {
+  if (!ui.toast || !ui.toastTitle || !ui.toastMsg) return;
+
+  ui.toastTitle.textContent = title;
+  ui.toastMsg.textContent = msg;
+  ui.toast.classList.remove("hidden");
+
+  // style
+  const cls =
+    kind === "error"
+      ? "border-red-200 bg-red-50 text-red-900 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-100"
+      : kind === "success"
+        ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
+        : "border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100";
+
+  ui.toastInner.className = `pointer-events-auto rounded-2xl border px-4 py-3 text-sm shadow-soft ${cls}`;
+
+  if (timeoutMs > 0) {
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => {
+      ui.toast.classList.add("hidden");
+    }, timeoutMs);
+  }
+}
+
+ui.toastClose?.addEventListener("click", () => ui.toast?.classList.add("hidden"));
 
 function setBanner(msg, kind = "info") {
   ui.banner.classList.remove("hidden");
@@ -266,6 +302,59 @@ async function refresh() {
   }
 }
 
+async function startPresence(user) {
+  // Presence: shows a toast when another user is online (connects)
+  // Privacy: we do NOT display email; only "un utilisateur".
+  // Requires Supabase Realtime enabled (default) + websocket access.
+  if (presenceChannel) return;
+
+  presenceChannel = supabase.channel("presence:online", {
+    config: {
+      presence: { key: user.id },
+    },
+  });
+
+  presenceChannel
+    .on("presence", { event: "sync" }, () => {
+      const state = presenceChannel.presenceState();
+      const ids = new Set(Object.keys(state || {}));
+      lastPresenceSet = ids;
+    })
+    .on("presence", { event: "join" }, ({ key }) => {
+      // join fires also for self in some cases; ignore if it's our own key
+      if (key && key !== user.id) {
+        showToast("👀", "Un autre utilisateur vient de se connecter.", "info", 5000);
+      }
+    })
+    .on("presence", { event: "leave" }, ({ key }) => {
+      if (key && key !== user.id) {
+        showToast("Info", "Un utilisateur vient de se déconnecter.", "info", 3500);
+      }
+    });
+
+  const { error } = await presenceChannel.subscribe(async (status) => {
+    if (status === "SUBSCRIBED") {
+      await presenceChannel.track({ online_at: new Date().toISOString() });
+    }
+  });
+
+  if (error) {
+    console.warn("presence subscribe error", error);
+  }
+}
+
+async function stopPresence() {
+  try {
+    if (presenceChannel) {
+      await presenceChannel.unsubscribe();
+      presenceChannel = null;
+      lastPresenceSet = new Set();
+    }
+  } catch {
+    // ignore
+  }
+}
+
 async function setSignedInUI(user) {
   ui.auth.classList.add("hidden");
   ui.app.classList.remove("hidden");
@@ -273,6 +362,7 @@ async function setSignedInUI(user) {
   ui.whoami.textContent = `Connecté: ${user.email}`;
 
   try {
+    await startPresence(user);
     await refresh();
   } catch (e) {
     setBanner(`Erreur refresh: ${e.message ?? e}`, "error");
@@ -286,6 +376,7 @@ function setSignedOutUI() {
 }
 
 ui.btnLogout.addEventListener("click", async () => {
+  await stopPresence();
   await supabase.auth.signOut();
   setSignedOutUI();
   setBanner("Déconnecté.", "success");
@@ -465,6 +556,7 @@ ui.btnSignup.addEventListener("click", async () => {
       if (session?.user) {
         await setSignedInUI(session.user);
       } else {
+        await stopPresence();
         setSignedOutUI();
       }
     });
