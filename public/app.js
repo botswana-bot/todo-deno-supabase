@@ -26,6 +26,7 @@ const ui = {
   password: $("password"),
   todoText: $("todo-text"),
   list: $("todo-list"),
+  empty: $("empty"),
   tpl: $("todo-item"),
 };
 
@@ -78,6 +79,11 @@ function renderTodos(todos) {
 
   const done = todos.filter((t) => t.done).length;
   ui.stats.textContent = `${todos.length} total • ${done} terminée(s)`;
+
+  // Empty state
+  if (ui.empty) {
+    ui.empty.classList.toggle("hidden", (todos?.length ?? 0) > 0);
+  }
 
   for (const t of todos) {
     const node = ui.tpl.content.cloneNode(true);
