@@ -65,9 +65,12 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes("YOUR_") || SUP
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function getUser() {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) throw error;
-  return data.user;
+  // supabase.auth.getUser() throws "Auth session missing" when there's no session.
+  // For a logged-out visitor, that's not an error: we just return null.
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  const user = sessionData?.session?.user ?? null;
+  return user;
 }
 
 function renderTodos(todos) {
