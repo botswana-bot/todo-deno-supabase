@@ -446,7 +446,7 @@ function startMouseTracking(selfId, email) {
   const color = colorFromId(selfId);
 
   let lastSent = 0;
-  const sendEveryMs = 33; // ~30fps
+  const sendEveryMs = 16; // ~60fps
 
   function onMove(e) {
     lastMouse.x = e.clientX;
