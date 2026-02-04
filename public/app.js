@@ -384,6 +384,8 @@ function ensureCursorEl(key) {
   el.style.top = "0px";
   el.style.transform = "translate(-9999px, -9999px)";
   el.style.zIndex = "1";
+  el.style.willChange = "transform";
+  el.style.transition = "transform 80ms linear";
 
   el.innerHTML = `
     <div style="display:flex; align-items:flex-start; gap:8px;">
@@ -443,17 +445,30 @@ function renderCursors(selfId) {
 function startMouseTracking(selfId, email) {
   const color = colorFromId(selfId);
 
+  let lastSent = 0;
+  const sendEveryMs = 33; // ~30fps
+
   function onMove(e) {
     lastMouse.x = e.clientX;
     lastMouse.y = e.clientY;
 
-    // throttle via rAF
+    // throttle via rAF + max send rate
     if (cursorRaf) return;
     cursorRaf = requestAnimationFrame(async () => {
       cursorRaf = null;
       if (!cursorChannel) return;
+
+      const now = performance.now();
+      if (now - lastSent < sendEveryMs) return;
+      lastSent = now;
+
       try {
-        await cursorChannel.track({ x: lastMouse.x, y: lastMouse.y, email, color, t: Date.now() });
+        // fast path: broadcast cursor position
+        await cursorChannel.send({
+          type: "broadcast",
+          event: "cursor",
+          payload: { id: selfId, x: lastMouse.x, y: lastMouse.y },
+        });
       } catch {
         // ignore
       }
@@ -474,41 +489,55 @@ let stopMouseTracking = null;
 async function startCursors(user) {
   if (cursorChannel) return;
 
-  cursorChannel = supabase.channel("presence:cursors", {
-    config: { presence: { key: user.id } },
+  // Presence is good for "who is online", but track() updates can be slow.
+  // For smooth cursor movement, we use broadcast events for position,
+  // and presence only for join/leave + identity.
+  cursorChannel = supabase.channel("cursors", {
+    config: {
+      presence: { key: user.id },
+      broadcast: { self: false },
+    },
   });
 
   cursorChannel
     .on("presence", { event: "sync" }, () => {
       const st = cursorChannel.presenceState();
-      cursorState.clear();
+      // Keep existing positions; just ensure we know who exists.
       for (const key of Object.keys(st || {})) {
-        const arr = st[key] || [];
-        // take the last tracked payload
-        const last = arr[arr.length - 1] || {};
-        cursorState.set(key, {
-          x: last.x,
-          y: last.y,
-          email: last.email,
-          color: last.color,
-        });
+        if (!cursorState.has(key)) cursorState.set(key, { x: -9999, y: -9999 });
+      }
+      // Remove those no longer present
+      for (const key of Array.from(cursorState.keys())) {
+        if (!(st && st[key])) cursorState.delete(key);
       }
       renderCursors(user.id);
     })
     .on("presence", { event: "join" }, ({ key, newPresences }) => {
       const last = (newPresences || []).slice(-1)[0] || {};
-      cursorState.set(key, { x: last.x, y: last.y, email: last.email, color: last.color });
+      cursorState.set(key, {
+        ...(cursorState.get(key) || {}),
+        email: last.email,
+        color: last.color,
+      });
       renderCursors(user.id);
     })
     .on("presence", { event: "leave" }, ({ key }) => {
       cursorState.delete(key);
+      renderCursors(user.id);
+    })
+    .on("broadcast", { event: "cursor" }, ({ payload }) => {
+      const { id, x, y } = payload || {};
+      if (!id || id === user.id) return;
+      const prev = cursorState.get(id) || {};
+      cursorState.set(id, { ...prev, x, y });
       renderCursors(user.id);
     });
 
   await cursorChannel.subscribe(async (status) => {
     if (status === "SUBSCRIBED") {
       stopMouseTracking = startMouseTracking(user.id, user.email);
-      await cursorChannel.track({ x: 0, y: 0, email: user.email, color: colorFromId(user.id), t: Date.now() });
+      // presence identity
+      await cursorChannel.track({ email: user.email, color: colorFromId(user.id), t: Date.now() });
     }
   });
 }
