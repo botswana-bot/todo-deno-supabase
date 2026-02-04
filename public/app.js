@@ -228,20 +228,42 @@ async function refresh() {
   // Try multi-list mode if migration exists
   const hasLists = await loadLists();
 
-  let q = supabase
-    .from("todos")
-    .select(
-      "id, title, done, inserted_at, list_id, todo_todo_tags(todo_tags(name))",
-    )
-    .order("inserted_at", { ascending: false });
+  // Preferred query (lists + tags)
+  try {
+    let q = supabase
+      .from("todos")
+      .select(
+        "id, title, done, inserted_at, list_id, todo_todo_tags(todo_tags(name))",
+      )
+      .order("inserted_at", { ascending: false });
 
-  if (hasLists && state.selectedListId) {
-    q = q.eq("list_id", state.selectedListId);
+    if (hasLists && state.selectedListId) {
+      q = q.eq("list_id", state.selectedListId);
+    }
+
+    const { data, error } = await q;
+    if (error) throw error;
+    renderTodos(data ?? []);
+    return;
+  } catch (e) {
+    // Fallback for partial migrations / PostgREST relationship hiccups
+    // (e.g. missing table / relationship cache not updated yet)
+    const msg = e?.message ?? String(e);
+    console.warn("refresh(primary) failed:", e);
+
+    const { data, error } = await supabase
+      .from("todos")
+      .select("id, title, done, inserted_at")
+      .order("inserted_at", { ascending: false });
+
+    if (error) throw error;
+    renderTodos(data ?? []);
+
+    setBanner(
+      `Mode compat: tags/listes pas encore disponibles (${msg}). Rafraîchis dans 1-2 min si tu viens d'appliquer le SQL.`,
+      "error",
+    );
   }
-
-  const { data, error } = await q;
-  if (error) throw error;
-  renderTodos(data ?? []);
 }
 
 async function setSignedInUI(user) {
@@ -249,7 +271,12 @@ async function setSignedInUI(user) {
   ui.app.classList.remove("hidden");
   ui.btnLogout.classList.remove("hidden");
   ui.whoami.textContent = `Connecté: ${user.email}`;
-  await refresh();
+
+  try {
+    await refresh();
+  } catch (e) {
+    setBanner(`Erreur refresh: ${e.message ?? e}`, "error");
+  }
 }
 
 function setSignedOutUI() {
