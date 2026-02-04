@@ -49,6 +49,21 @@ const ui = {
 let presenceChannel = null;
 let lastPresenceSet = new Set();
 
+let todosRealtimeChannel = null;
+let refreshTimer = null;
+function scheduleRefresh() {
+  // coalesce bursts (update + join table updates)
+  if (refreshTimer) return;
+  refreshTimer = setTimeout(async () => {
+    refreshTimer = null;
+    try {
+      await refresh();
+    } catch (e) {
+      console.warn("realtime refresh failed", e);
+    }
+  }, 350);
+}
+
 let state = {
   lists: [],
   selectedListId: null,
@@ -243,6 +258,14 @@ function renderTodos(todos) {
     const del = node.querySelector(".todo-del");
 
     text.textContent = t.title;
+
+    // Show creator email under the task
+    if (text && t.created_by_email) {
+      const emailLine = document.createElement("div");
+      emailLine.className = "mt-1 text-[11px] text-zinc-500 dark:text-zinc-400";
+      emailLine.textContent = `par ${t.created_by_email}`;
+      text.parentElement?.parentElement?.appendChild(emailLine);
+    }
     cb.checked = !!t.done;
     if (t.done) {
       text.classList.add("line-through", "text-zinc-400", "dark:text-zinc-500");
@@ -292,7 +315,7 @@ async function refresh() {
     let q = supabase
       .from("todos")
       .select(
-        "id, title, done, inserted_at, list_id, todo_todo_tags(todo_tags(name))",
+        "id, title, done, inserted_at, list_id, created_by_email, todo_todo_tags(todo_tags(name))",
       )
       .order("inserted_at", { ascending: false });
 
@@ -378,6 +401,40 @@ async function stopPresence() {
   }
 }
 
+async function startTodosRealtime() {
+  if (todosRealtimeChannel) return;
+
+  todosRealtimeChannel = supabase
+    .channel("realtime:todos")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "todos" },
+      () => scheduleRefresh(),
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "todo_todo_tags" },
+      () => scheduleRefresh(),
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "todo_lists" },
+      () => scheduleRefresh(),
+    )
+    .subscribe();
+}
+
+async function stopTodosRealtime() {
+  try {
+    if (todosRealtimeChannel) {
+      await todosRealtimeChannel.unsubscribe();
+      todosRealtimeChannel = null;
+    }
+  } catch {
+    // ignore
+  }
+}
+
 async function setSignedInUI(user) {
   ui.auth.classList.add("hidden");
   ui.app.classList.remove("hidden");
@@ -386,6 +443,7 @@ async function setSignedInUI(user) {
 
   try {
     await startPresence(user);
+    await startTodosRealtime();
     await refresh();
   } catch (e) {
     setBanner(`Erreur refresh: ${e.message ?? e}`, "error");
@@ -399,6 +457,7 @@ function setSignedOutUI() {
 }
 
 ui.btnLogout.addEventListener("click", async () => {
+  await stopTodosRealtime();
   await stopPresence();
   await supabase.auth.signOut();
   setSignedOutUI();
@@ -515,7 +574,7 @@ ui.todoForm.addEventListener("submit", async (e) => {
         .from("todo_tags")
         .upsert(
           tags.map((name) => ({ name })),
-          { onConflict: "user_id,name" },
+          { onConflict: "name" },
         )
         .select("id, name");
 
@@ -617,6 +676,7 @@ ui.btnSignup.addEventListener("click", async () => {
       if (session?.user) {
         await setSignedInUI(session.user);
       } else {
+        await stopTodosRealtime();
         await stopPresence();
         setSignedOutUI();
       }
