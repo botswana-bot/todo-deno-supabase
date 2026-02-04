@@ -25,9 +25,17 @@ const ui = {
   email: $("email"),
   password: $("password"),
   todoText: $("todo-text"),
+  todoTags: $("todo-tags"),
+  listSelect: $("list-select"),
+  btnNewList: $("btn-new-list"),
   list: $("todo-list"),
   empty: $("empty"),
   tpl: $("todo-item"),
+};
+
+let state = {
+  lists: [],
+  selectedListId: null,
 };
 
 function setBanner(msg, kind = "info") {
@@ -65,6 +73,89 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes("YOUR_") || SUP
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+function normalizeTagName(s) {
+  return (s || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function parseTags(input) {
+  return Array.from(
+    new Set(
+      (input || "")
+        .split(",")
+        .map(normalizeTagName)
+        .filter(Boolean),
+    ),
+  ).slice(0, 8);
+}
+
+function renderTagPill(name) {
+  const span = document.createElement("span");
+  span.className =
+    "inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200";
+  span.textContent = name;
+  return span;
+}
+
+async function ensureDefaultList() {
+  const { data: lists, error } = await supabase
+    .from("todo_lists")
+    .select("id, name, inserted_at")
+    .order("inserted_at", { ascending: true });
+
+  if (error) {
+    // If migration not applied yet, table won't exist.
+    // We handle it gracefully by keeping the old single-list behavior.
+    return null;
+  }
+
+  if ((lists?.length ?? 0) === 0) {
+    const { data: created, error: e2 } = await supabase
+      .from("todo_lists")
+      .insert({ name: "Inbox" })
+      .select("id, name")
+      .single();
+    if (e2) throw e2;
+    return created;
+  }
+
+  return lists[0];
+}
+
+async function loadLists() {
+  const { data, error } = await supabase
+    .from("todo_lists")
+    .select("id, name, inserted_at")
+    .order("inserted_at", { ascending: true });
+
+  if (error) return false;
+
+  state.lists = data ?? [];
+  if (!state.selectedListId) state.selectedListId = state.lists[0]?.id ?? null;
+  renderListSelect();
+  return true;
+}
+
+function renderListSelect() {
+  if (!ui.listSelect) return;
+
+  ui.listSelect.innerHTML = "";
+  for (const l of state.lists) {
+    const opt = document.createElement("option");
+    opt.value = l.id;
+    opt.textContent = l.name;
+    if (l.id === state.selectedListId) opt.selected = true;
+    ui.listSelect.appendChild(opt);
+  }
+
+  // If lists are not available (migration not applied), hide controls.
+  const show = (state.lists?.length ?? 0) > 0;
+  ui.listSelect.closest("div")?.classList?.toggle("hidden", !show);
+  ui.btnNewList?.classList?.toggle("hidden", !show);
+}
+
 async function getUser() {
   // supabase.auth.getUser() throws "Auth session missing" when there's no session.
   // For a logged-out visitor, that's not an error: we just return null.
@@ -87,15 +178,24 @@ function renderTodos(todos) {
 
   for (const t of todos) {
     const node = ui.tpl.content.cloneNode(true);
-    const li = node.querySelector("li");
     const cb = node.querySelector(".todo-toggle");
     const text = node.querySelector(".todo-text");
+    const tagsWrap = node.querySelector(".todo-tags");
     const del = node.querySelector(".todo-del");
 
     text.textContent = t.title;
     cb.checked = !!t.done;
     if (t.done) {
       text.classList.add("line-through", "text-zinc-400", "dark:text-zinc-500");
+    }
+
+    // Render tags if present
+    if (tagsWrap) {
+      tagsWrap.innerHTML = "";
+      const tagNames = (t?.todo_todo_tags ?? [])
+        .map((x) => x?.todo_tags?.name)
+        .filter(Boolean);
+      for (const name of tagNames) tagsWrap.appendChild(renderTagPill(name));
     }
 
     cb.addEventListener("change", async () => {
@@ -125,11 +225,21 @@ async function refresh() {
   const user = await getUser();
   if (!user) return;
 
-  const { data, error } = await supabase
+  // Try multi-list mode if migration exists
+  const hasLists = await loadLists();
+
+  let q = supabase
     .from("todos")
-    .select("id, title, done, inserted_at")
+    .select(
+      "id, title, done, inserted_at, list_id, todo_todo_tags(todo_tags(name))",
+    )
     .order("inserted_at", { ascending: false });
 
+  if (hasLists && state.selectedListId) {
+    q = q.eq("list_id", state.selectedListId);
+  }
+
+  const { data, error } = await q;
   if (error) throw error;
   renderTodos(data ?? []);
 }
@@ -164,6 +274,36 @@ ui.btnRefresh.addEventListener("click", async () => {
   }
 });
 
+ui.listSelect?.addEventListener("change", async () => {
+  state.selectedListId = ui.listSelect.value || null;
+  localStorage.setItem("selectedListId", state.selectedListId || "");
+  await refresh();
+});
+
+ui.btnNewList?.addEventListener("click", async () => {
+  try {
+    clearBanner();
+    const name = prompt("Nom de la nouvelle liste ?", "Nouvelle liste");
+    if (!name) return;
+
+    const { data, error } = await supabase
+      .from("todo_lists")
+      .insert({ name: name.trim() })
+      .select("id, name")
+      .single();
+
+    if (error) throw error;
+
+    state.selectedListId = data.id;
+    await loadLists();
+    setBanner("Liste créée.", "success");
+    setTimeout(clearBanner, 1200);
+    await refresh();
+  } catch (e) {
+    setBanner(`Erreur création liste: ${e.message ?? e}`, "error");
+  }
+});
+
 ui.todoForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const title = (ui.todoText.value || "").trim();
@@ -176,10 +316,44 @@ ui.todoForm.addEventListener("submit", async (e) => {
       return;
     }
 
-    const { error } = await supabase.from("todos").insert({ title });
+    // Ensure list exists (best-effort)
+    const firstList = await ensureDefaultList();
+    if (firstList && !state.selectedListId) state.selectedListId = firstList.id;
+
+    const list_id = state.selectedListId || null;
+
+    // 1) Insert todo
+    const { data: todo, error } = await supabase
+      .from("todos")
+      .insert({ title, list_id })
+      .select("id")
+      .single();
     if (error) throw error;
 
+    // 2) Upsert tags + join (optional)
+    const tags = parseTags(ui.todoTags?.value || "");
+    if (tags.length > 0) {
+      // Create missing tags
+      const { data: tagRows, error: tagErr } = await supabase
+        .from("todo_tags")
+        .upsert(
+          tags.map((name) => ({ name })),
+          { onConflict: "user_id,name" },
+        )
+        .select("id, name");
+
+      if (!tagErr && (tagRows?.length ?? 0) > 0) {
+        const joins = tagRows.map((t) => ({ todo_id: todo.id, tag_id: t.id }));
+        const { error: joinErr } = await supabase
+          .from("todo_todo_tags")
+          .insert(joins);
+        if (joinErr) throw joinErr;
+      }
+      // If tag tables are not present yet, ignore silently.
+    }
+
     ui.todoText.value = "";
+    if (ui.todoTags) ui.todoTags.value = "";
     await refresh();
   } catch (e2) {
     setBanner(`Erreur ajout: ${e2.message ?? e2}`, "error");
@@ -188,7 +362,10 @@ ui.todoForm.addEventListener("submit", async (e) => {
 
 ui.btnClearDone.addEventListener("click", async () => {
   try {
-    const { error } = await supabase.from("todos").delete().eq("done", true);
+    let q = supabase.from("todos").delete().eq("done", true);
+    const hasLists = (state.lists?.length ?? 0) > 0;
+    if (hasLists && state.selectedListId) q = q.eq("list_id", state.selectedListId);
+    const { error } = await q;
     if (error) throw error;
     await refresh();
   } catch (e) {
@@ -246,6 +423,10 @@ ui.btnSignup.addEventListener("click", async () => {
 // Init
 (async function init() {
   try {
+    // Restore last selected list
+    const savedListId = (localStorage.getItem("selectedListId") || "").trim();
+    if (savedListId) state.selectedListId = savedListId;
+
     const user = await getUser();
     if (user) {
       await setSignedInUI(user);

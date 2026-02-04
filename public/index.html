@@ -203,17 +203,46 @@
                   </div>
                 </div>
 
-                <form id="todo-form" class="mt-6 flex gap-2">
-                  <input
-                    id="todo-text"
-                    placeholder="Ajouter une tâche…"
-                    autocomplete="off"
-                    class="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:shadow-glow dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-emerald-400"
-                  />
-                  <button class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700 active:scale-[.98]">
-                    Ajouter
-                  </button>
-                </form>
+                <div class="mt-6 grid gap-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Liste</span>
+                      <select
+                        id="list-select"
+                        class="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:shadow-glow dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-emerald-400"
+                      ></select>
+                    </div>
+                    <button
+                      id="btn-new-list"
+                      type="button"
+                      class="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium transition hover:bg-zinc-50 active:scale-[.98] dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+                    >
+                      + Nouvelle liste
+                    </button>
+                  </div>
+
+                  <form id="todo-form" class="flex gap-2">
+                    <input
+                      id="todo-text"
+                      placeholder="Ajouter une tâche…"
+                      autocomplete="off"
+                      class="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:shadow-glow dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-emerald-400"
+                    />
+                    <button class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700 active:scale-[.98]">
+                      Ajouter
+                    </button>
+                  </form>
+
+                  <div class="grid gap-1">
+                    <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400" for="todo-tags">Tags (optionnel)</label>
+                    <input
+                      id="todo-tags"
+                      placeholder="ex: maison, urgent"
+                      autocomplete="off"
+                      class="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:shadow-glow dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-emerald-400"
+                    />
+                  </div>
+                </div>
 
                 <div class="mt-6">
                   <div class="mb-3 flex items-center justify-between">
@@ -232,10 +261,13 @@
 
                   <template id="todo-item">
                     <li class="group flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 shadow-sm transition hover:-translate-y-[1px] hover:shadow-soft dark:border-zinc-800 dark:bg-zinc-950">
-                      <label class="flex flex-1 items-center gap-3">
-                        <input class="todo-toggle h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-600 dark:border-zinc-700" type="checkbox" />
-                        <span class="todo-text text-sm"></span>
-                      </label>
+                      <div class="flex flex-1 flex-col gap-1">
+                        <label class="flex items-center gap-3">
+                          <input class="todo-toggle h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-600 dark:border-zinc-700" type="checkbox" />
+                          <span class="todo-text text-sm"></span>
+                        </label>
+                        <div class="todo-tags flex flex-wrap gap-1"></div>
+                      </div>
                       <button class="todo-del rounded-xl px-3 py-2 text-sm font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 active:scale-[.98] dark:hover:bg-zinc-900 dark:hover:text-white">
                         Supprimer
                       </button>
