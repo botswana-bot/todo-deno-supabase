@@ -40,31 +40,33 @@
     </div>
 
     <div class="min-h-full">
-      <header class="sticky top-0 z-10 border-b border-zinc-200/70 bg-white/75 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/75">
+      <header class="sticky top-0 z-10 border-b border-zinc-200/70 bg-white/70 backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-950/70">
         <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <div class="flex items-center gap-3">
-            <div class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-600 text-white shadow-soft">
-              <span class="text-sm font-semibold">✓</span>
+            <div class="relative grid h-10 w-10 place-items-center overflow-hidden rounded-2xl bg-emerald-600 text-white shadow-soft">
+              <div class="absolute inset-0 bg-gradient-to-br from-white/30 via-white/0 to-black/20"></div>
+              <span class="relative text-sm font-semibold">✓</span>
             </div>
             <div>
-              <div class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Todo</div>
-              <div class="text-lg font-semibold">Multi‑appareils</div>
+              <div class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Todo</div>
+              <div class="text-lg font-semibold tracking-tight">Multi‑appareils</div>
             </div>
-            <span class="hidden rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 sm:inline-flex dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-200">
-              Supabase
+            <span class="hidden items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 sm:inline-flex dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-200">
+              <span class="text-[10px]">●</span> Supabase
             </span>
           </div>
 
           <div class="flex items-center gap-2">
             <button
               id="btn-theme"
-              class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm transition hover:bg-zinc-50 active:scale-[.98] dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+              class="group inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm transition hover:bg-zinc-50 active:scale-[.98] dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
             >
-              Thème
+              <span class="inline-flex h-5 w-5 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">☾</span>
+              <span class="hidden sm:inline">Thème</span>
             </button>
             <button
               id="btn-logout"
-              class="hidden rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white shadow-soft transition hover:bg-black active:scale-[.98] dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+              class="hidden rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white shadow-soft transition hover:bg-black active:scale-[.98] dark:bg-white dark:text-black dark:hover:bg-zinc-200"
             >
               Déconnexion
             </button>
@@ -73,7 +75,41 @@
       </header>
 
       <main class="mx-auto max-w-5xl px-4 py-10">
+        <!-- subtle hero line -->
+        <div class="mb-8 flex flex-col gap-2">
+          <div class="text-sm text-zinc-600 dark:text-zinc-300">
+            <span class="font-semibold text-zinc-900 dark:text-zinc-100">Organise</span> tes tâches par listes et tags, et suis l’activité en temps réel.
+          </div>
+          <div class="h-px w-full bg-gradient-to-r from-transparent via-zinc-200 to-transparent dark:via-zinc-800"></div>
+        </div>
         <div id="banner" class="mb-6 hidden rounded-2xl border border-zinc-200 bg-white p-4 text-sm shadow-soft dark:border-zinc-800 dark:bg-zinc-900"></div>
+
+        <!-- Modal: create list -->
+        <div id="modal" class="fixed inset-0 z-50 hidden">
+          <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+          <div class="relative mx-auto mt-24 w-[min(32rem,calc(100vw-2rem))]">
+            <div class="rounded-3xl border border-zinc-200 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-950">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <div class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Liste</div>
+                  <h3 class="mt-1 text-xl font-semibold tracking-tight">Créer une nouvelle liste</h3>
+                </div>
+                <button id="modal-close" type="button" class="rounded-xl px-2 py-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white">✕</button>
+              </div>
+
+              <div class="mt-5 grid gap-2">
+                <label class="text-sm font-medium" for="modal-list-name">Nom</label>
+                <input id="modal-list-name" placeholder="ex: Courses" class="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:shadow-glow dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-emerald-400" />
+                <p class="text-xs text-zinc-500 dark:text-zinc-400">Astuce: “Inbox”, “Maison”, “Boulot”…</p>
+              </div>
+
+              <div class="mt-6 flex items-center justify-end gap-2">
+                <button id="modal-cancel" type="button" class="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium hover:bg-zinc-50 active:scale-[.98] dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900">Annuler</button>
+                <button id="modal-create" type="button" class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft hover:bg-emerald-700 active:scale-[.98]">Créer</button>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- Toast / realtime notifications -->
         <div id="toast" class="pointer-events-none fixed bottom-6 left-1/2 z-50 hidden w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2">
@@ -216,13 +252,13 @@
                   </div>
                 </div>
 
-                <div class="mt-6 grid gap-3">
+                <div class="mt-6 grid gap-4">
                   <div class="flex flex-wrap items-center justify-between gap-2">
                     <div class="flex items-center gap-2">
                       <span class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Liste</span>
                       <select
                         id="list-select"
-                        class="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:shadow-glow dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-emerald-400"
+                        class="min-w-[12rem] rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:shadow-glow dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-emerald-400"
                       ></select>
                     </div>
                     <button
@@ -234,27 +270,30 @@
                     </button>
                   </div>
 
-                  <form id="todo-form" class="flex gap-2">
-                    <input
-                      id="todo-text"
-                      placeholder="Ajouter une tâche…"
-                      autocomplete="off"
-                      class="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:shadow-glow dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-emerald-400"
-                    />
-                    <button class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700 active:scale-[.98]">
-                      Ajouter
-                    </button>
-                  </form>
+                  <form id="todo-form" class="grid gap-2">
+                    <div class="flex gap-2">
+                      <input
+                        id="todo-text"
+                        placeholder="Ajouter une tâche…"
+                        autocomplete="off"
+                        class="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:shadow-glow dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-emerald-400"
+                      />
+                      <button class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700 active:scale-[.98]">
+                        Ajouter
+                      </button>
+                    </div>
 
-                  <div class="grid gap-1">
-                    <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400" for="todo-tags">Tags (optionnel)</label>
-                    <input
-                      id="todo-tags"
-                      placeholder="ex: maison, urgent"
-                      autocomplete="off"
-                      class="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:shadow-glow dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-emerald-400"
-                    />
-                  </div>
+                    <div class="grid gap-1">
+                      <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400" for="todo-tags">Tags (optionnel)</label>
+                      <input
+                        id="todo-tags"
+                        placeholder="ex: maison, urgent"
+                        autocomplete="off"
+                        class="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:shadow-glow dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-emerald-400"
+                      />
+                      <div id="tags-preview" class="mt-1 flex flex-wrap gap-1"></div>
+                    </div>
+                  </form>
                 </div>
 
                 <div class="mt-6">

@@ -26,8 +26,15 @@ const ui = {
   password: $("password"),
   todoText: $("todo-text"),
   todoTags: $("todo-tags"),
+  tagsPreview: $("tags-preview"),
   listSelect: $("list-select"),
   btnNewList: $("btn-new-list"),
+
+  modal: $("modal"),
+  modalClose: $("modal-close"),
+  modalCancel: $("modal-cancel"),
+  modalCreate: $("modal-create"),
+  modalListName: $("modal-list-name"),
   list: $("todo-list"),
   empty: $("empty"),
   tpl: $("todo-item"),
@@ -127,13 +134,29 @@ function parseTags(input) {
   ).slice(0, 8);
 }
 
-function renderTagPill(name) {
+function renderTagPill(name, tone = "neutral") {
   const span = document.createElement("span");
-  span.className =
-    "inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200";
+  const base =
+    "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium";
+
+  const cls =
+    tone === "accent"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-200"
+      : "border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200";
+
+  span.className = `${base} ${cls}`;
   span.textContent = name;
   return span;
 }
+
+function renderTagsPreview() {
+  if (!ui.tagsPreview) return;
+  ui.tagsPreview.innerHTML = "";
+  const tags = parseTags(ui.todoTags?.value || "");
+  for (const t of tags) ui.tagsPreview.appendChild(renderTagPill(t, "accent"));
+}
+
+ui.todoTags?.addEventListener("input", renderTagsPreview);
 
 async function ensureDefaultList() {
   const { data: lists, error } = await supabase
@@ -398,27 +421,63 @@ ui.listSelect?.addEventListener("change", async () => {
   await refresh();
 });
 
+function openModal() {
+  if (!ui.modal) return;
+  ui.modal.classList.remove("hidden");
+  ui.modalListName && (ui.modalListName.value = "");
+  setTimeout(() => ui.modalListName?.focus(), 50);
+}
+
+function closeModal() {
+  ui.modal?.classList.add("hidden");
+}
+
+ui.modalClose?.addEventListener("click", closeModal);
+ui.modalCancel?.addEventListener("click", closeModal);
+ui.modal?.addEventListener("click", (e) => {
+  if (e.target === ui.modal) closeModal();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeModal();
+});
+
+async function createListFromModal() {
+  const name = (ui.modalListName?.value || "").trim();
+  if (!name) {
+    showToast("Oups", "Donne un nom à la liste.", "error", 2500);
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("todo_lists")
+    .insert({ name })
+    .select("id, name")
+    .single();
+
+  if (error) throw error;
+
+  state.selectedListId = data.id;
+  await loadLists();
+  showToast("Liste créée", `“${data.name}”`, "success", 2200);
+  await refresh();
+  closeModal();
+}
+
+ui.modalCreate?.addEventListener("click", async () => {
+  try {
+    await createListFromModal();
+  } catch (e) {
+    showToast("Erreur", `Création liste: ${e.message ?? e}`, "error", 5000);
+  }
+});
+
 ui.btnNewList?.addEventListener("click", async () => {
   try {
     clearBanner();
-    const name = prompt("Nom de la nouvelle liste ?", "Nouvelle liste");
-    if (!name) return;
-
-    const { data, error } = await supabase
-      .from("todo_lists")
-      .insert({ name: name.trim() })
-      .select("id, name")
-      .single();
-
-    if (error) throw error;
-
-    state.selectedListId = data.id;
-    await loadLists();
-    setBanner("Liste créée.", "success");
-    setTimeout(clearBanner, 1200);
-    await refresh();
+    openModal();
   } catch (e) {
-    setBanner(`Erreur création liste: ${e.message ?? e}`, "error");
+    setBanner(`Erreur: ${e.message ?? e}`, "error");
   }
 });
 
@@ -544,6 +603,8 @@ ui.btnSignup.addEventListener("click", async () => {
     // Restore last selected list
     const savedListId = (localStorage.getItem("selectedListId") || "").trim();
     if (savedListId) state.selectedListId = savedListId;
+
+    renderTagsPreview();
 
     const user = await getUser();
     if (user) {
