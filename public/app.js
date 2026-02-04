@@ -44,10 +44,17 @@ const ui = {
   toastTitle: $("toast-title"),
   toastMsg: $("toast-msg"),
   toastClose: $("toast-close"),
+
+  cursorLayer: $("cursor-layer"),
 };
 
 let presenceChannel = null;
 let lastPresenceSet = new Set();
+
+let cursorChannel = null;
+let cursorState = new Map(); // key -> {x,y,email,color}
+let cursorRaf = null;
+let lastMouse = { x: 0, y: 0 };
 
 let todosRealtimeChannel = null;
 let refreshTimer = null;
@@ -348,6 +355,179 @@ async function refresh() {
   }
 }
 
+function colorFromId(id) {
+  // deterministic nice colors
+  const palette = [
+    "#10b981", // emerald
+    "#3b82f6", // blue
+    "#a855f7", // purple
+    "#f59e0b", // amber
+    "#ef4444", // red
+    "#06b6d4", // cyan
+    "#f97316", // orange
+    "#22c55e", // green
+  ];
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length];
+}
+
+function ensureCursorEl(key) {
+  if (!ui.cursorLayer) return null;
+  let el = ui.cursorLayer.querySelector(`[data-cursor-key="${key}"]`);
+  if (el) return el;
+
+  el = document.createElement("div");
+  el.dataset.cursorKey = key;
+  el.style.position = "absolute";
+  el.style.left = "0px";
+  el.style.top = "0px";
+  el.style.transform = "translate(-9999px, -9999px)";
+  el.style.zIndex = "1";
+
+  el.innerHTML = `
+    <div style="display:flex; align-items:flex-start; gap:8px;">
+      <div data-dot style="width:10px;height:10px;border-radius:999px;background:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.18)"></div>
+      <div style="display:flex; flex-direction:column; gap:2px;">
+        <div data-arrow style="width:0;height:0;border-left:10px solid #10b981;border-top:10px solid transparent;border-bottom:10px solid transparent; filter: drop-shadow(0 2px 6px rgba(0,0,0,.25));"></div>
+        <div data-label style="font-size:11px; line-height:1; padding:6px 8px; border-radius:12px; background:rgba(255,255,255,.9); border:1px solid rgba(228,228,231,.9); color:#111827; box-shadow:0 10px 25px rgba(0,0,0,.10); max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
+      </div>
+    </div>
+  `;
+
+  ui.cursorLayer.appendChild(el);
+  return el;
+}
+
+function renderCursors(selfId) {
+  if (!ui.cursorLayer) return;
+
+  for (const [key, info] of cursorState.entries()) {
+    if (key === selfId) continue;
+    const el = ensureCursorEl(key);
+    if (!el) continue;
+
+    const x = Math.max(0, Math.min(window.innerWidth, info.x ?? 0));
+    const y = Math.max(0, Math.min(window.innerHeight, info.y ?? 0));
+    el.style.transform = `translate(${x}px, ${y}px)`;
+
+    const color = info.color || "#10b981";
+    const dot = el.querySelector("[data-dot]");
+    const arrow = el.querySelector("[data-arrow]");
+    const label = el.querySelector("[data-label]");
+    if (dot) {
+      dot.style.background = color;
+      dot.style.boxShadow = `0 0 0 4px ${color}2a`;
+    }
+    if (arrow) {
+      arrow.style.borderLeftColor = color;
+    }
+    if (label) {
+      label.textContent = info.email || "(email inconnu)";
+    }
+  }
+
+  // Remove stale DOM nodes
+  const nodes = Array.from(ui.cursorLayer.querySelectorAll("[data-cursor-key]"));
+  for (const n of nodes) {
+    const k = n.getAttribute("data-cursor-key");
+    if (!k) continue;
+    if (k === selfId) {
+      n.remove();
+      continue;
+    }
+    if (!cursorState.has(k)) n.remove();
+  }
+}
+
+function startMouseTracking(selfId, email) {
+  const color = colorFromId(selfId);
+
+  function onMove(e) {
+    lastMouse.x = e.clientX;
+    lastMouse.y = e.clientY;
+
+    // throttle via rAF
+    if (cursorRaf) return;
+    cursorRaf = requestAnimationFrame(async () => {
+      cursorRaf = null;
+      if (!cursorChannel) return;
+      try {
+        await cursorChannel.track({ x: lastMouse.x, y: lastMouse.y, email, color, t: Date.now() });
+      } catch {
+        // ignore
+      }
+    });
+  }
+
+  window.addEventListener("mousemove", onMove);
+
+  return () => {
+    window.removeEventListener("mousemove", onMove);
+    if (cursorRaf) cancelAnimationFrame(cursorRaf);
+    cursorRaf = null;
+  };
+}
+
+let stopMouseTracking = null;
+
+async function startCursors(user) {
+  if (cursorChannel) return;
+
+  cursorChannel = supabase.channel("presence:cursors", {
+    config: { presence: { key: user.id } },
+  });
+
+  cursorChannel
+    .on("presence", { event: "sync" }, () => {
+      const st = cursorChannel.presenceState();
+      cursorState.clear();
+      for (const key of Object.keys(st || {})) {
+        const arr = st[key] || [];
+        // take the last tracked payload
+        const last = arr[arr.length - 1] || {};
+        cursorState.set(key, {
+          x: last.x,
+          y: last.y,
+          email: last.email,
+          color: last.color,
+        });
+      }
+      renderCursors(user.id);
+    })
+    .on("presence", { event: "join" }, ({ key, newPresences }) => {
+      const last = (newPresences || []).slice(-1)[0] || {};
+      cursorState.set(key, { x: last.x, y: last.y, email: last.email, color: last.color });
+      renderCursors(user.id);
+    })
+    .on("presence", { event: "leave" }, ({ key }) => {
+      cursorState.delete(key);
+      renderCursors(user.id);
+    });
+
+  await cursorChannel.subscribe(async (status) => {
+    if (status === "SUBSCRIBED") {
+      stopMouseTracking = startMouseTracking(user.id, user.email);
+      await cursorChannel.track({ x: 0, y: 0, email: user.email, color: colorFromId(user.id), t: Date.now() });
+    }
+  });
+}
+
+async function stopCursors() {
+  try {
+    stopMouseTracking?.();
+    stopMouseTracking = null;
+    cursorState.clear();
+    if (ui.cursorLayer) ui.cursorLayer.innerHTML = "";
+    if (cursorChannel) {
+      await cursorChannel.unsubscribe();
+      cursorChannel = null;
+    }
+  } catch {
+    // ignore
+  }
+}
+
 async function startPresence(user) {
   // Presence: shows a toast when another user is online (connects)
   // Privacy: we do NOT display email; only "un utilisateur".
@@ -444,6 +624,7 @@ async function setSignedInUI(user) {
   try {
     await startPresence(user);
     await startTodosRealtime();
+    await startCursors(user);
     await refresh();
   } catch (e) {
     setBanner(`Erreur refresh: ${e.message ?? e}`, "error");
@@ -457,6 +638,7 @@ function setSignedOutUI() {
 }
 
 ui.btnLogout.addEventListener("click", async () => {
+  await stopCursors();
   await stopTodosRealtime();
   await stopPresence();
   await supabase.auth.signOut();
@@ -676,6 +858,7 @@ ui.btnSignup.addEventListener("click", async () => {
       if (session?.user) {
         await setSignedInUI(session.user);
       } else {
+        await stopCursors();
         await stopTodosRealtime();
         await stopPresence();
         setSignedOutUI();
